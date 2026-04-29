@@ -1,74 +1,3 @@
-from weasyprint import HTML
-
-# Conteúdo HTML para o Guia em PDF
-html_content = """
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        @page {
-            size: A4;
-            margin: 15mm;
-            background-color: #0d1117;
-        }
-        body {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            color: #ffffff;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0;
-        }
-        .header {
-            background-color: #000000;
-            padding: 30pt;
-            text-align: center;
-            border-bottom: 2pt solid #ffffff;
-        }
-        h1 { font-size: 22pt; margin: 0; text-transform: uppercase; letter-spacing: 2pt; }
-        h2 { font-size: 16pt; color: #ffffff; border-left: 4pt solid #ffffff; padding-left: 10pt; margin-top: 25pt; }
-        .section { background-color: #161b22; border: 1pt solid #30363d; padding: 15pt; border-radius: 8pt; margin: 10pt 0; }
-        .code {
-            background-color: #0d1117;
-            padding: 10pt;
-            border-radius: 5pt;
-            font-family: 'Courier New', monospace;
-            font-size: 9pt;
-            color: #d1d5da;
-            white-space: pre-wrap;
-            border: 1pt solid #30363d;
-        }
-        .highlight { color: #58a6ff; font-weight: bold; }
-        .footer { text-align: center; font-size: 8pt; color: #8b949e; margin-top: 30pt; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>SISTEMA DE GESTÃO - INSANOS MC GV</h1>
-    </div>
-
-    <h2>1. Configuração da Planilha Google</h2>
-    <div class="section">
-        <p>A sua planilha precisa estar organizada com duas abas específicas para que o código funcione:</p>
-        <ul>
-            <li><strong>Aba 1 (nomeada como <span class="highlight">integrantes</span>):</strong> Colunas: Nome, Apelido, Cargo, Status, Comentarios, Data_Ingresso</li>
-            <li><strong>Aba 2 (nomeada como <span class="highlight">eventos</span>):</strong> Colunas: Data, Tipo, Descricao, Participantes, Relatorio_Final</li>
-        </ul>
-        <p>Certifique-se de que a planilha está compartilhada como <strong>"Qualquer pessoa com o link"</strong> em modo <strong>"Editor"</strong>.</p>
-    </div>
-
-    <h2>2. Funcionalidades de Eventos e PDF</h2>
-    <div class="section">
-        <p>O novo sistema permitirá:</p>
-        <ul>
-            <li><strong>Chamada em tempo real:</strong> Seleção dos irmãos presentes através de checkboxes.</li>
-            <li><strong>Relatório de Missão:</strong> Campo de texto para descrever o que ocorreu no evento.</li>
-            <li><strong>Exportação Regional:</strong> Geração de um arquivo PDF profissional com os últimos eventos e lista de presença.</li>
-        </ul>
-    </div>
-
-    <h2>3. O Código Completo para o GitHub</h2>
-    <div class="code">
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -76,62 +5,114 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+import io
 
-# ID extraído da sua planilha
+# --- CONFIGURAÇÃO DA PLANILHA ---
+# Link da sua planilha que você enviou
 SHEET_ID = "1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
+
+# GID é o número que aparece no final do link da planilha para cada aba
+# GID 0 costuma ser a primeira aba (integrantes)
 URL_MEMBROS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
-# Nota: Você deve pegar o GID da aba de eventos na URL da planilha
-URL_EVENTOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=SEU_GID_AQUI"
 
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
-# (Funções de Background e CSS omitidas aqui por espaço, manter as anteriores no arquivo final)
+# Estilo Visual (Preto e Branco Insanos)
+st.markdown("""
+    <style>
+    .stApp { background-color: #000000; color: white; }
+    [data-testid="stMetric"] { background-color: #111; padding: 15px; border-radius: 10px; border: 1px solid #333; }
+    div.stButton > button { background-color: white; color: black; font-weight: bold; }
+    </style>
+""", unsafe_allow_html=True)
 
-def load_data(url):
-    try: return pd.read_csv(url)
-    except: return pd.DataFrame()
+# --- CARREGAR DADOS ---
+@st.cache_data(ttl=60)
+def carregar_membros():
+    try:
+        df = pd.read_csv(URL_MEMBROS)
+        df['Apelido'] = df['Apelido'].fillna("Sem Apelido").astype(str)
+        return df
+    except:
+        return pd.DataFrame(columns=["Nome", "Apelido", "Cargo", "Status"])
 
-df_membros = load_data(URL_MEMBROS)
-df_eventos = load_data(URL_EVENTOS)
+df_membros = carregar_membros()
 
-menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento", "PDF Regional"]
+# --- MENU LATERAL ---
+st.sidebar.title("💀 INSANOS MC - GV")
+menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento (Chamada)", "Gerar PDF Regional"]
 escolha = st.sidebar.selectbox("Navegação", menu)
 
-if escolha == "Relatar Evento":
-    st.title("Chamada e Relatório de Evento")
-    with st.form("form_evento"):
-        data = st.date_input("Data do Evento")
-        tipo = st.selectbox("Tipo", ["Pub", "Social", "Bate e Volta", "Reunião"])
-        desc = st.text_input("Descrição Curta")
-        relatorio = st.text_area("Relatório / Comentários")
+# --- 1. DASHBOARD ---
+if escolha == "Dashboard":
+    st.title("Painel de Controle Divisão GV")
+    c1, c2 = st.columns(2)
+    
+    if not df_membros.empty:
+        ativos = len(df_membros[df_membros['Status'] == 'Ativo'])
+        c1.metric("Integrantes Ativos", ativos)
+        c2.metric("Total no Quadro", len(df_membros))
         
-        st.write("### Chamada")
-        presentes = []
+        st.write("### Distribuição de Cargos")
+        st.bar_chart(df_membros['Cargo'].value_counts())
+
+# --- 2. GESTÃO DE INTEGRANTES ---
+elif escolha == "Gestão de Integrantes":
+    st.title("Quadro de Integrantes")
+    st.info("Para alterar dados, use o link da planilha abaixo:")
+    st.link_button("Ir para Planilha Google", f"https://docs.google.com/spreadsheets/d/{SHEET_ID}")
+    st.dataframe(df_membros, use_container_width=True)
+
+# --- 3. RELATAR EVENTO ---
+elif escolha == "Relatar Evento (Chamada)":
+    st.title("Chamada de Evento")
+    with st.form("evento_form"):
+        tipo = st.selectbox("Tipo de Evento", ["Pub", "Ação Social", "Reunião", "Bate e Volta"])
+        data_ev = st.date_input("Data")
+        relato = st.text_area("Relatório da Missão")
+        
+        st.write("### Presença")
+        participantes = []
         if not df_membros.empty:
-            ativos = df_membros[df_membros['Status'] == 'Ativo']
+            ativos_lista = df_membros[df_membros['Status'] == 'Ativo']
             cols = st.columns(3)
-            for i, (idx, row) in enumerate(ativos.iterrows()):
-                if cols[i%3].checkbox(row['Apelido'], key=f"p_{idx}"):
-                    presentes.append(row['Apelido'])
+            for i, (idx, row) in enumerate(ativos_lista.iterrows()):
+                if cols[i % 3].checkbox(row['Apelido'], key=f"check_{idx}"):
+                    participantes.append(row['Apelido'])
         
-        if st.form_submit_button("Registrar"):
-            st.success("Dados prontos! Insira-os na planilha para salvar permanentemente.")
+        if st.form_submit_button("Confirmar Chamada"):
+            st.success(f"Evento registrado! Copie os nomes para a planilha: {', '.join(participantes)}")
 
-elif escolha == "PDF Regional":
-    st.title("Gerar Relatório para Regional")
-    if st.button("Gerar PDF"):
-        # Lógica de PDF usando ReportLab
-        st.info("PDF sendo gerado com base na aba 'eventos' da planilha.")
-    </div>
-
-    <div class="footer">
-        Documentação Gerada para Insanos MC - Divisão Governador Valadares
-    </div>
-</body>
-</html>
-"""
-
-with open("manual_gestao_insanos.html", "w", encoding="utf-8") as f:
-    f.write(html_content)
-
-HTML(filename="manual_gestao_insanos.html").write_pdf("Manual_Gestao_Insanos_GV.pdf")
+# --- 4. GERAR PDF ---
+elif escolha == "Gerar PDF Regional":
+    st.title("Relatório para Regional")
+    st.write("Gera um PDF baseado nos dados atuais dos integrantes.")
+    
+    if st.button("📄 Baixar PDF"):
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        elements.append(Paragraph("RELATÓRIO OFICIAL - INSANOS MC GV", styles['Title']))
+        elements.append(Spacer(1, 20))
+        
+        # Tabela de Integrantes
+        data = [["Apelido", "Cargo", "Status"]] + df_membros[["Apelido", "Cargo", "Status"]].values.tolist()
+        t = Table(data, colWidths=[150, 150, 100])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.black),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER')
+        ]))
+        elements.append(t)
+        
+        doc.build(elements)
+        st.download_button(
+            label="Clique para Salvar o PDF",
+            data=buffer.getvalue(),
+            file_name=f"Relatorio_Insanos_GV_{datetime.now().strftime('%d_%m_%Y')}.pdf",
+            mime="application/pdf"
+        )
