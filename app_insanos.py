@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
 # COLE O ID DA SUA PLANILHA AQUI:
-SHEET_ID = "COLOQUE_AQUI_O_ID_DA_SUA_PLANILHA"
+SHEET_ID = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE/edit?gid=0#gid=0"
 SHEET_NAME = "integrantes"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
