@@ -1,67 +1,83 @@
 import streamlit as st
 import pandas as pd
+import os
+import base64
 from datetime import datetime
 
 # --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
-# COLE O ID DA SUA PLANILHA AQUI:
+# 1. COLE O ID DA SUA PLANILHA AQUI:
 SHEET_ID = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE/edit?gid=0#gid=0"
-SHEET_NAME = "integrantes"
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
+URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv"
 
-# Estilo para Celular e PC
-st.markdown("""
+# --- FUNÇÃO PARA CARREGAR O BACKGROUND ---
+def get_base64(bin_file):
+    with open(bin_file, 'rb') as f:
+        return base64.b64encode(f.read()).decode()
+
+def set_bg(bin_file):
+    bin_str = get_base64(bin_file)
+    st.markdown(f'''
     <style>
-    .stApp { background-color: #000000; color: white; }
-    [data-testid="stMetric"] { background-color: #111; padding: 15px; border-radius: 10px; }
-    div.stButton > button { background-color: white; color: black; font-weight: bold; width: 100%; }
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{bin_str}");
+        background-size: cover;
+        background-attachment: fixed;
+    }}
+    /* Cartões escuros para leitura fácil no celular */
+    [data-testid="stForm"], .stDataFrame, [data-testid="stMetric"], .stExpander {{
+        background-color: rgba(0, 0, 0, 0.8) !important;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #444;
+    }}
+    h1, h2, h3, label, p {{ color: white !important; text-shadow: 2px 2px 4px #000; }}
     </style>
-""", unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
 
-# --- FUNÇÕES DE DADOS (GOOGLE SHEETS) ---
-def carregar_dados():
-    try:
-        return pd.read_csv(URL)
-    except:
-        return pd.DataFrame(columns=["Nome", "Apelido", "Cargo", "Status", "Comentarios", "Data_Ingresso"])
+# Aplica o Fundo se o arquivo existir no GitHub
+if os.path.exists("background.jpg"):
+    set_bg('background.jpg')
 
-df_membros = carregar_dados()
+# --- SIDEBAR COM LOGO ---
+if os.path.exists("logo_insanos.png"):
+    st.sidebar.image("logo_insanos.png")
+else:
+    st.sidebar.title("💀 INSANOS MC")
 
-# --- SIDEBAR ---
-st.sidebar.title("💀 INSANOS GV")
+# --- CARREGAR DADOS ---
+@st.cache_data(ttl=60) # Atualiza os dados a cada 1 minuto
+def load_data():
+    return pd.read_csv(URL)
+
+try:
+    df = load_data()
+except:
+    st.error("Erro ao conectar com a planilha. Verifique o ID e o compartilhamento.")
+    df = pd.DataFrame()
+
+# --- MENU ---
 menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento"]
-escolha = st.sidebar.selectbox("Menu", menu)
+escolha = st.sidebar.selectbox("Navegação", menu)
 
-# --- DASHBOARD ---
 if escolha == "Dashboard":
-    st.title("Gestão de Divisão")
-    c1, c2 = st.columns(2)
-    c1.metric("Membros Ativos", len(df_membros[df_membros['Status'] == 'Ativo']))
-    c2.metric("Total Cadastrados", len(df_membros))
-    
-    st.write("### Integrantes por Cargo")
-    if not df_membros.empty:
-        st.bar_chart(df_membros['Cargo'].value_counts())
+    st.title("Divisão Gov. Valadares")
+    if not df.empty:
+        c1, c2 = st.columns(2)
+        c1.metric("Membros Ativos", len(df[df['Status'] == 'Ativo']))
+        c2.metric("Total de Irmãos", len(df))
+        
+        st.write("### Graduações")
+        st.bar_chart(df['Cargo'].value_counts())
+    else:
+        st.warning("Aguardando dados da planilha...")
 
-# --- GESTÃO ---
 elif escolha == "Gestão de Integrantes":
-    st.title("Controle de Irmãos")
-    
-    with st.expander("➕ Novo Cadastro"):
-        with st.form("novo", clear_on_submit=True):
-            n = st.text_input("Nome")
-            a = st.text_input("Apelido")
-            c = st.selectbox("Cargo", ["Diretor", "Subdiretor", "Social", "ADM", "GrauX", "FULL VIII", "Stg Armas"])
-            s = st.selectbox("Status", ["Ativo", "Afastado"])
-            d = st.date_input("Ingresso", format="DD/MM/YYYY")
-            
-            if st.form_submit_button("Salvar Online"):
-                st.info("Para salvar via link, use a integração de escrita do Google Sheets ou edite diretamente na planilha compartilhada.")
+    st.title("Controle de Quadro")
+    st.write("🔗 [EDITAR PLANILHA ORIGINAL](https://docs.google.com/spreadsheets/d/" + SHEET_ID + ")")
+    st.dataframe(df, use_container_width=True)
 
-    st.write("### Lista de Membros")
-    st.dataframe(df_membros, use_container_width=True)
-    st.write("🔗 [Clique aqui para editar a Planilha Original](f'https://docs.google.com/spreadsheets/d/{SHEET_ID}')")
-
-# O código para gravar diretamente no Google Sheets exige uma chave de API (Service Account)
-# Por segurança em links públicos, a forma mais fácil é ler via CSV e editar via link da planilha.
+elif escolha == "Relatar Evento":
+    st.title("Chamada / Relatório")
+    st.info("Para registrar eventos via link, edite a aba de eventos na sua Planilha do Google.")
