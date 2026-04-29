@@ -40,11 +40,13 @@ if os.path.exists("logo_insanos.png"):
     st.sidebar.image("logo_insanos.png", width=100)
 
 # --- CARREGAR DADOS ---
-df_membros = conn.read(spreadsheet=URL_PLANILHA, worksheet="integrantes")
-df_eventos = conn.read(spreadsheet=URL_PLANILHA, worksheet="eventos")
-
-menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento (Chamada)", "Gerar PDF Regional"]
-escolha = st.sidebar.selectbox("Navegação", menu)
+# Tentativa de leitura simplificada
+try:
+    df_membros = conn.read(spreadsheet=URL_PLANILHA, worksheet="integrantes")
+    df_eventos = conn.read(spreadsheet=URL_PLANILHA, worksheet="eventos")
+except Exception as e:
+    st.error("Erro ao ler as abas da planilha. Verifique se os nomes das abas são 'integrantes' e 'eventos'.")
+    st.stop()
 
 # --- 1. DASHBOARD ---
 if escolha == "Dashboard":
