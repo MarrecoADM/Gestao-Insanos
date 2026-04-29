@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import os
+import base64
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -7,112 +9,133 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 import io
 
-# --- CONFIGURAÇÃO DA PLANILHA ---
-# Link da sua planilha que você enviou
+# --- 1. CONFIGURAÇÃO DA PLANILHA (SEU ID) ---
 SHEET_ID = "1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
-
-# GID é o número que aparece no final do link da planilha para cada aba
-# GID 0 costuma ser a primeira aba (integrantes)
 URL_MEMBROS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
 
+# --- 2. FUNÇÕES DE INTERFACE (LOGO E BACKGROUND) ---
+def get_base64(bin_file):
+    with open(bin_file, 'rb') as f:
+        return base64.b64encode(f.read()).decode()
+
+def set_bg(bin_file):
+    bin_str = get_base64(bin_file)
+    st.markdown(f'''
+    <style>
+    .stApp {{
+        background-image: url("data:image/jpg;base64,{bin_str}");
+        background-size: cover;
+        background-attachment: fixed;
+    }}
+    /* Deixar os blocos de texto escuros para leitura fácil */
+    [data-testid="stForm"], .stDataFrame, [data-testid="stMetric"], .stExpander {{
+        background-color: rgba(0, 0, 0, 0.85) !important;
+        padding: 20px;
+        border-radius: 10px;
+        border: 1px solid #444;
+    }}
+    h1, h2, h3, p, span, label {{ color: white !important; text-shadow: 2px 2px 4px #000; }}
+    </style>
+    ''', unsafe_allow_html=True)
+
+# --- 3. INÍCIO DO APP ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
-# Estilo Visual (Preto e Branco Insanos)
-st.markdown("""
-    <style>
-    .stApp { background-color: #000000; color: white; }
-    [data-testid="stMetric"] { background-color: #111; padding: 15px; border-radius: 10px; border: 1px solid #333; }
-    div.stButton > button { background-color: white; color: black; font-weight: bold; }
-    </style>
-""", unsafe_allow_html=True)
+# Aplica o fundo se o arquivo existir no GitHub
+if os.path.exists("background.jpg"):
+    set_bg('background.jpg')
+else:
+    st.markdown("<style>.stApp { background-color: #000000; }</style>", unsafe_allow_html=True)
 
-# --- CARREGAR DADOS ---
-@st.cache_data(ttl=60)
-def carregar_membros():
+# --- 4. SIDEBAR COM LOGO PEQUENA ---
+if os.path.exists("logo_insanos.png"):
+    # width=100 deixa a logo pequena conforme solicitado
+    st.sidebar.image("logo_insanos.png", width=120) 
+else:
+    st.sidebar.title("💀 INSANOS MC")
+
+st.sidebar.subheader("Divisão Gov. Valadares")
+
+# --- 5. CARREGAR DADOS ---
+@st.cache_data(ttl=30)
+def load_data():
     try:
         df = pd.read_csv(URL_MEMBROS)
-        df['Apelido'] = df['Apelido'].fillna("Sem Apelido").astype(str)
+        df['Apelido'] = df['Apelido'].fillna("Sem Nome").astype(str)
         return df
     except:
-        return pd.DataFrame(columns=["Nome", "Apelido", "Cargo", "Status"])
+        return pd.DataFrame()
 
-df_membros = carregar_membros()
+df_membros = load_data()
 
-# --- MENU LATERAL ---
-st.sidebar.title("💀 INSANOS MC - GV")
+# --- 6. MENU DE NAVEGAÇÃO ---
 menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento (Chamada)", "Gerar PDF Regional"]
 escolha = st.sidebar.selectbox("Navegação", menu)
 
-# --- 1. DASHBOARD ---
+# --- DASHBOARD ---
 if escolha == "Dashboard":
-    st.title("Painel de Controle Divisão GV")
-    c1, c2 = st.columns(2)
-    
+    st.title("Estatísticas da Divisão")
     if not df_membros.empty:
+        c1, c2 = st.columns(2)
         ativos = len(df_membros[df_membros['Status'] == 'Ativo'])
         c1.metric("Integrantes Ativos", ativos)
         c2.metric("Total no Quadro", len(df_membros))
         
-        st.write("### Distribuição de Cargos")
+        st.write("---")
+        st.subheader("Graduações / Cargos")
         st.bar_chart(df_membros['Cargo'].value_counts())
+    else:
+        st.error("Erro ao carregar dados. Verifique o compartilhamento da planilha.")
 
-# --- 2. GESTÃO DE INTEGRANTES ---
+# --- GESTÃO ---
 elif escolha == "Gestão de Integrantes":
-    st.title("Quadro de Integrantes")
-    st.info("Para alterar dados, use o link da planilha abaixo:")
-    st.link_button("Ir para Planilha Google", f"https://docs.google.com/spreadsheets/d/{SHEET_ID}")
+    st.title("Quadro de Membros")
+    st.write("🔗 [EDITAR PLANILHA ORIGINAL](https://docs.google.com/spreadsheets/d/" + SHEET_ID + ")")
     st.dataframe(df_membros, use_container_width=True)
 
-# --- 3. RELATAR EVENTO ---
+# --- CHAMADA ---
 elif escolha == "Relatar Evento (Chamada)":
-    st.title("Chamada de Evento")
-    with st.form("evento_form"):
-        tipo = st.selectbox("Tipo de Evento", ["Pub", "Ação Social", "Reunião", "Bate e Volta"])
-        data_ev = st.date_input("Data")
-        relato = st.text_area("Relatório da Missão")
+    st.title("Chamada e Missão")
+    with st.form("chamada_evento"):
+        tipo = st.selectbox("Tipo", ["Pub", "Ação Social", "Bate e Volta", "Reunião"])
+        relato = st.text_area("O que aconteceu na missão?")
         
-        st.write("### Presença")
-        participantes = []
+        st.write("### Lista de Presença")
+        presencas = []
         if not df_membros.empty:
-            ativos_lista = df_membros[df_membros['Status'] == 'Ativo']
-            cols = st.columns(3)
-            for i, (idx, row) in enumerate(ativos_lista.iterrows()):
-                if cols[i % 3].checkbox(row['Apelido'], key=f"check_{idx}"):
-                    participantes.append(row['Apelido'])
+            membros_ativos = df_membros[df_membros['Status'] == 'Ativo']
+            cols = st.columns(4)
+            for i, (idx, row) in enumerate(membros_ativos.iterrows()):
+                if cols[i % 4].checkbox(row['Apelido'], key=f"p_{idx}"):
+                    presencas.append(row['Apelido'])
         
-        if st.form_submit_button("Confirmar Chamada"):
-            st.success(f"Evento registrado! Copie os nomes para a planilha: {', '.join(participantes)}")
+        if st.form_submit_button("Finalizar Chamada"):
+            st.success(f"Presenças confirmadas: {', '.join(presencas)}")
+            st.info("Copie os dados acima para a aba de eventos da sua planilha.")
 
-# --- 4. GERAR PDF ---
+# --- PDF ---
 elif escolha == "Gerar PDF Regional":
-    st.title("Relatório para Regional")
-    st.write("Gera um PDF baseado nos dados atuais dos integrantes.")
-    
-    if st.button("📄 Baixar PDF"):
+    st.title("Relatório Regional")
+    if st.button("📄 Gerar e Baixar PDF"):
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
-        elements = []
-        styles = getSampleStyleSheet()
+        estilos = getSampleStyleSheet()
+        elementos = [Paragraph("INSANOS MC - GOVERNADOR VALADARES", estilos['Title']), Spacer(1, 12)]
         
-        # Título
-        elements.append(Paragraph("RELATÓRIO OFICIAL - INSANOS MC GV", styles['Title']))
-        elements.append(Spacer(1, 20))
-        
-        # Tabela de Integrantes
-        data = [["Apelido", "Cargo", "Status"]] + df_membros[["Apelido", "Cargo", "Status"]].values.tolist()
-        t = Table(data, colWidths=[150, 150, 100])
+        # Tabela do PDF
+        dados_pdf = [["Apelido", "Cargo", "Status"]] + df_membros[["Apelido", "Cargo", "Status"]].values.tolist()
+        t = Table(dados_pdf, colWidths=[150, 150, 100])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.black),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER')
+            ('BACKGROUND', (0,0), (-1,0), colors.black),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 1, colors.black)
         ]))
-        elements.append(t)
+        elementos.append(t)
+        doc.build(elementos)
         
-        doc.build(elements)
         st.download_button(
-            label="Clique para Salvar o PDF",
+            label="Clique aqui para Baixar Arquivo",
             data=buffer.getvalue(),
-            file_name=f"Relatorio_Insanos_GV_{datetime.now().strftime('%d_%m_%Y')}.pdf",
+            file_name=f"Relatorio_GV_{datetime.now().strftime('%d_%m_%Y')}.pdf",
             mime="application/pdf"
         )
