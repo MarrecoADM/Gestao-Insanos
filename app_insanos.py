@@ -1,28 +1,37 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-
-# --- TRATAMENTO DA CHAVE ---
-# Pegamos a chave simples do Secrets e colocamos os cabeçalhos que o Google exige
-raw_key = st.secrets["connections"]["gsheets"]["private_key"]
-if "BEGIN PRIVATE KEY" not in raw_key:
-    formatted_key = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
-    st.secrets["connections"]["gsheets"]["private_key"] = formatted_key
-
-# Agora inicializamos a conexão normalmente
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
-# ... resto do seu código segue igual ...
+import os
+import base64
+from datetime import datetime
+import io
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
-# URL da sua planilha (pode permanecer aqui como referência)
-URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
+# --- CONEXÃO E TRATAMENTO DE CREDENCIAIS ---
+try:
+    # 1. Transformamos os segredos em um dicionário para podermos manipular
+    secrets_dict = st.secrets["connections"]["gsheets"].to_dict()
 
-# Inicializa a conexão usando o Secrets
-conn = st.connection("gsheets", type=GSheetsConnection)
+    # 2. Corrigimos a chave privada caso ela tenha sido colada no formato "curto"
+    if "-----BEGIN PRIVATE KEY-----" not in secrets_dict["private_key"]:
+        raw_key = secrets_dict["private_key"]
+        # Reconstrói o formato PEM que o Google exige
+        secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
+
+    # 3. Inicializamos a conexão usando o dicionário tratado
+    conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
+except Exception as e:
+    st.error(f"Erro ao configurar credenciais: {e}")
+    st.stop()
+
+# URL da sua planilha
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
 
 # --- FUNÇÕES DE INTERFACE (Background e Estilo) ---
 def set_bg(bin_file):
@@ -59,9 +68,17 @@ escolha = st.sidebar.selectbox("Navegação", menu)
 if escolha == "Dashboard":
     st.title("Estatísticas da Divisão GV")
     c1, c2 = st.columns(2)
-    c1.metric("Membros Ativos", len(df_membros[df_membros['Status'] == 'Ativo']))
-    c2.metric("Eventos Registrados", len(df_eventos))
-    st.bar_chart(df_membros['Cargo'].value_counts())
+    
+    # Filtro de ativos para métricas
+    ativos_count = len(df_membros[df_membros['Status'] == 'Ativo']) if not df_membros.empty else 0
+    eventos_count = len(df_eventos) if not df_eventos.empty else 0
+    
+    c1.metric("Membros Ativos", ativos_count)
+    c2.metric("Eventos Registrados", eventos_count)
+    
+    if not df_membros.empty:
+        st.bar_chart(df_membros['Cargo'].value_counts())
+    
     st.write("### Lista Geral")
     st.dataframe(df_membros, use_container_width=True)
 
@@ -88,10 +105,12 @@ elif escolha == "Relatar Evento (Chamada)":
         relato = st.text_area("Relato")
         st.write("### Presença")
         presencas = []
-        ativos = df_membros[df_membros['Status'] == 'Ativo']
-        for idx, row in ativos.iterrows():
-            if st.checkbox(row['Apelido'], key=f"check_{idx}"):
-                presencas.append(row['Apelido'])
+        
+        if not df_membros.empty:
+            ativos = df_membros[df_membros['Status'] == 'Ativo']
+            for idx, row in ativos.iterrows():
+                if st.checkbox(row['Apelido'], key=f"check_{idx}"):
+                    presencas.append(row['Apelido'])
         
         if st.form_submit_button("Gravar Missão"):
             novo_ev = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y"), "Tipo": tipo, "Relato": relato, "Participantes": ", ".join(presencas)}])
