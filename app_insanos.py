@@ -13,30 +13,29 @@ try:
     # 1. Pegamos os segredos brutos
     raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
 
-    # 2. Corrigimos a chave privada (Private Key) se necessário
+    # 2. Corrigimos a chave privada (Private Key)
     private_key = raw_secrets.get("private_key", "")
     if "-----BEGIN PRIVATE KEY-----" not in private_key:
         private_key = f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----\n"
 
-    # 3. Criamos um dicionário LIMPO apenas com o que a GSheetsConnection aceita
-    # Isso evita o erro de "unexpected keyword argument"
-    credentials = {
-        "service_account": {
-            "type": "service_account",
-            "project_id": raw_secrets.get("project_id"),
-            "private_key_id": raw_secrets.get("private_key_id"),
-            "private_key": private_key,
-            "client_email": raw_secrets.get("client_email"),
-            "client_id": raw_secrets.get("client_id"),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": raw_secrets.get("client_x509_cert_url")
-        }
+    # 3. Criamos o dicionário de credenciais exatamente como a biblioteca espera
+    # Removendo 'type' e 'project_id' que costumam dar conflito em algumas versões
+    creds = {
+        "type": "service_account",
+        "project_id": raw_secrets.get("project_id"),
+        "private_key_id": raw_secrets.get("private_key_id"),
+        "private_key": private_key,
+        "client_email": raw_secrets.get("client_email"),
+        "client_id": raw_secrets.get("client_id"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": raw_secrets.get("client_x509_cert_url")
     }
 
-    # 4. Inicializamos a conexão passando apenas as credenciais formatadas
-    conn = st.connection("gsheets", type=GSheetsConnection, **credentials)
+    # 4. Inicializamos a conexão passando as credenciais no parâmetro 'credentials'
+    # Esta é a forma oficial da biblioteca para lidar com dicionários de Service Account
+    conn = st.connection("gsheets", type=GSheetsConnection, credentials=creds)
     
 except Exception as e:
     st.error(f"Erro crítico de credenciais: {e}")
