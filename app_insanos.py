@@ -10,28 +10,37 @@ st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
 # --- CONEXÃO E TRATAMENTO DE CREDENCIAIS ---
 try:
-    # 1. Pegamos os segredos
-    secrets_dict = st.secrets["connections"]["gsheets"].to_dict()
+    # 1. Pegamos os segredos brutos
+    raw_secrets = st.secrets["connections"]["gsheets"].to_dict()
 
-    # 2. Corrigimos a chave privada (Private Key)
-    if "-----BEGIN PRIVATE KEY-----" not in secrets_dict["private_key"]:
-        raw_key = secrets_dict["private_key"]
-        secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
+    # 2. Corrigimos a chave privada (Private Key) se necessário
+    private_key = raw_secrets.get("private_key", "")
+    if "-----BEGIN PRIVATE KEY-----" not in private_key:
+        private_key = f"-----BEGIN PRIVATE KEY-----\n{private_key}\n-----END PRIVATE KEY-----\n"
 
-    # 3. Inicializamos a conexão de forma "blindada"
-    # Passamos a classe GSheetsConnection explicitamente e os segredos via kwargs
-    conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
+    # 3. Criamos um dicionário LIMPO apenas com o que a GSheetsConnection aceita
+    # Isso evita o erro de "unexpected keyword argument"
+    credentials = {
+        "service_account": {
+            "type": "service_account",
+            "project_id": raw_secrets.get("project_id"),
+            "private_key_id": raw_secrets.get("private_key_id"),
+            "private_key": private_key,
+            "client_email": raw_secrets.get("client_email"),
+            "client_id": raw_secrets.get("client_id"),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": raw_secrets.get("client_x509_cert_url")
+        }
+    }
+
+    # 4. Inicializamos a conexão passando apenas as credenciais formatadas
+    conn = st.connection("gsheets", type=GSheetsConnection, **credentials)
     
 except Exception as e:
-    # Caso ainda dê erro de "multiple values for type", usamos esta alternativa:
-    try:
-        # Remove o 'type' do dicionário para não duplicar com o argumento do st.connection
-        if "type" in secrets_dict:
-            del secrets_dict["type"]
-        conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
-    except Exception as e2:
-        st.error(f"Erro crítico de credenciais: {e2}")
-        st.stop()
+    st.error(f"Erro crítico de credenciais: {e}")
+    st.stop()
 
 # URL da sua planilha
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
