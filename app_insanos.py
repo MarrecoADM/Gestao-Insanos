@@ -5,10 +5,26 @@ import os
 import base64
 from datetime import datetime
 import io
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+
+st.set_page_config(page_title="Insanos MC - GV", layout="wide")
+
+# MUDANÇA AQUI: Em vez de usar o link direto, vamos usar o nome que o conector entende
+# O conector vai buscar automaticamente as credenciais que você colou no Secrets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# --- CARREGAR DADOS ---
+try:
+    # Agora passamos apenas o link, o 'conn' cuidará da segurança usando os Secrets
+    url = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
+    
+    df_membros = conn.read(spreadsheet=url, worksheet="integrantes")
+    df_eventos = conn.read(spreadsheet=url, worksheet="eventos")
+    
+    st.sidebar.success("Conectado à Planilha!")
+except Exception as e:
+    st.error(f"Erro de Conexão: {e}")
+    st.info("Dica: Verifique se o e-mail 'app-insanos@appinsano.iam.gserviceaccount.com' é EDITOR na planilha.")
+    st.stop()
 
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
