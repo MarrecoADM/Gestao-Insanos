@@ -1,14 +1,19 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-import os
-import base64
-from datetime import datetime
-import io
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
+
+# --- TRATAMENTO DA CHAVE ---
+# Pegamos a chave simples do Secrets e colocamos os cabeçalhos que o Google exige
+raw_key = st.secrets["connections"]["gsheets"]["private_key"]
+if "BEGIN PRIVATE KEY" not in raw_key:
+    formatted_key = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
+    st.secrets["connections"]["gsheets"]["private_key"] = formatted_key
+
+# Agora inicializamos a conexão normalmente
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
+# ... resto do seu código segue igual ...
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
