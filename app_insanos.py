@@ -5,10 +5,6 @@ import os
 import base64
 from datetime import datetime
 import io
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
@@ -24,8 +20,10 @@ try:
         # Reconstrói o formato PEM que o Google exige
         secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
 
-    # 3. Inicializamos a conexão usando o dicionário tratado
-    conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
+    # 3. Inicializamos a conexão
+    # Removemos o 'type' daqui porque ele já existe dentro do 'secrets_dict'
+    conn = st.connection("gsheets", **secrets_dict)
+    
 except Exception as e:
     st.error(f"Erro ao configurar credenciais: {e}")
     st.stop()
@@ -69,7 +67,6 @@ if escolha == "Dashboard":
     st.title("Estatísticas da Divisão GV")
     c1, c2 = st.columns(2)
     
-    # Filtro de ativos para métricas
     ativos_count = len(df_membros[df_membros['Status'] == 'Ativo']) if not df_membros.empty else 0
     eventos_count = len(df_eventos) if not df_eventos.empty else 0
     
