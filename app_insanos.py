@@ -10,115 +10,70 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-# --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
-# Link da sua planilha (ajustado para conexão direta)
+# Link da sua planilha
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
 
-# Conexão com Google Sheets
+# Conexão oficial via Secrets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FUNÇÕES DE INTERFACE ---
+# --- INTERFACE ---
 def set_bg(bin_file):
     with open(bin_file, 'rb') as f:
         bin_str = base64.b64encode(f.read()).decode()
-    st.markdown(f'''
-    <style>
-    .stApp {{ background-image: url("data:image/jpg;base64,{bin_str}"); background-size: cover; background-attachment: fixed; }}
-    [data-testid="stForm"], .stDataFrame, [data-testid="stMetric"], .stExpander {{
-        background-color: rgba(0, 0, 0, 0.85) !important; padding: 20px; border-radius: 10px; border: 1px solid #444;
-    }}
-    h1, h2, h3, p, span, label {{ color: white !important; }}
-    </style>
-    ''', unsafe_allow_html=True)
+    st.markdown(f'''<style>.stApp {{ background-image: url("data:image/jpg;base64,{bin_str}"); background-size: cover; background-attachment: fixed; }}
+    [data-testid="stForm"], .stDataFrame, [data-testid="stMetric"], .stExpander {{ background-color: rgba(0, 0, 0, 0.85) !important; padding: 20px; border-radius: 10px; border: 1px solid #444; }}
+    h1, h2, h3, p, span, label {{ color: white !important; }}</style>''', unsafe_allow_html=True)
 
-if os.path.exists("background.jpg"):
-    set_bg('background.jpg')
+if os.path.exists("background.jpg"): set_bg('background.jpg')
+if os.path.exists("logo_insanos.png"): st.sidebar.image("logo_insanos.png", width=100)
 
-if os.path.exists("logo_insanos.png"):
-    st.sidebar.image("logo_insanos.png", width=100)
-
-# --- CARREGAR DADOS ---
-# Tentativa de leitura simplificada
+# --- CARREGAR DADOS COM TRATAMENTO DE ERRO ---
 try:
     df_membros = conn.read(spreadsheet=URL_PLANILHA, worksheet="integrantes")
     df_eventos = conn.read(spreadsheet=URL_PLANILHA, worksheet="eventos")
 except Exception as e:
-    st.error("Erro ao ler as abas da planilha. Verifique se os nomes das abas são 'integrantes' e 'eventos'.")
+    st.error("Erro de Autenticação. Verifique se o e-mail da 'Conta de Serviço' foi adicionado como Editor na planilha.")
     st.stop()
 
-# --- 1. DASHBOARD ---
+menu = ["Dashboard", "Gestão de Integrantes", "Relatar Evento", "PDF Regional"]
+escolha = st.sidebar.selectbox("Menu", menu)
+
 if escolha == "Dashboard":
-    st.title("Estatísticas da Divisão")
+    st.title("Gestão Divisão GV")
     c1, c2 = st.columns(2)
     c1.metric("Membros Ativos", len(df_membros[df_membros['Status'] == 'Ativo']))
-    c2.metric("Eventos Registrados", len(df_eventos))
+    c2.metric("Eventos", len(df_eventos))
     st.bar_chart(df_membros['Cargo'].value_counts())
 
-# --- 2. GESTÃO DE INTEGRANTES ---
 elif escolha == "Gestão de Integrantes":
-    st.title("Cadastro de Irmãos")
-    
-    with st.expander("➕ Adicionar Novo Integrante"):
-        with st.form("add_membro"):
-            nome = st.text_input("Nome Completo")
-            apelido = st.text_input("Apelido")
-            cargo = st.selectbox("Cargo", ["Diretor", "Subdiretor", "Social", "ADM", "GrauX", "FULL VIII"])
-            status = st.selectbox("Status", ["Ativo", "Afastado"])
-            coment = st.text_area("Comentários")
-            
-            if st.form_submit_button("Salvar na Planilha"):
-                nova_linha = pd.DataFrame([{"Nome": nome, "Apelido": apelido, "Cargo": cargo, "Status": status, "Comentarios": coment, "Data_Ingresso": datetime.now().strftime("%d/%m/%Y")}])
-                updated_df = pd.concat([df_membros, nova_linha], ignore_index=True)
-                conn.update(spreadsheet=URL_PLANILHA, worksheet="integrantes", data=updated_df)
-                st.success("Integrante salvo com sucesso!")
-                st.rerun()
+    st.title("Cadastro")
+    with st.form("add"):
+        apelido = st.text_input("Apelido")
+        cargo = st.selectbox("Cargo", ["Diretor", "Subdiretor", "Social", "ADM", "GrauX", "FULL VIII"])
+        status = st.selectbox("Status", ["Ativo", "Afastado"])
+        if st.form_submit_button("Salvar na Planilha"):
+            nova_linha = pd.DataFrame([{"Apelido": apelido, "Cargo": cargo, "Status": status, "Data_Ingresso": datetime.now().strftime("%d/%m/%Y")}])
+            updated = pd.concat([df_membros, nova_linha], ignore_index=True)
+            conn.update(spreadsheet=URL_PLANILHA, worksheet="integrantes", data=updated)
+            st.success("Salvo!")
+            st.rerun()
+    st.dataframe(df_membros)
 
-    st.write("### Quadro Atual")
-    st.dataframe(df_membros, use_container_width=True)
-
-# --- 3. RELATAR EVENTO ---
-elif escolha == "Relatar Evento (Chamada)":
-    st.title("Chamada e Relatório")
-    with st.form("form_evento"):
-        tipo = st.selectbox("Tipo", ["Pub", "Ação Social", "Bate e Volta", "Reunião"])
-        relato = st.text_area("Relatório da Missão")
-        
-        st.write("### Presença")
-        presencas = []
+elif escolha == "Relatar Evento":
+    st.title("Chamada")
+    with st.form("evento"):
+        relato = st.text_area("Relatório")
+        participantes = []
         ativos = df_membros[df_membros['Status'] == 'Ativo']
         cols = st.columns(4)
         for i, (idx, row) in enumerate(ativos.iterrows()):
             if cols[i % 4].checkbox(row['Apelido'], key=f"p_{idx}"):
-                presencas.append(row['Apelido'])
+                participantes.append(row['Apelido'])
         
-        if st.form_submit_button("Gravar Evento na Planilha"):
-            novo_evento = pd.DataFrame([{
-                "Data": datetime.now().strftime("%d/%m/%Y"),
-                "Tipo": tipo,
-                "Descricao": relato,
-                "Participantes": ", ".join(presencas)
-            }])
-            updated_eventos = pd.concat([df_eventos, novo_evento], ignore_index=True)
-            conn.update(spreadsheet=URL_PLANILHA, worksheet="eventos", data=updated_eventos)
-            st.success("Evento e Presenças gravados com sucesso!")
-            st.rerun()
-
-# --- 4. GERAR PDF ---
-elif escolha == "Gerar PDF Regional":
-    st.title("Relatório Regional")
-    if st.button("📄 Baixar PDF"):
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4)
-        elementos = [Paragraph("INSANOS MC - GV", getSampleStyleSheet()['Title']), Spacer(1, 12)]
-        
-        dados_pdf = [["Data", "Evento", "Participantes"]]
-        for _, row in df_eventos.tail(10).iterrows():
-            dados_pdf.append([row['Data'], row['Tipo'], row['Participantes'][:40] + "..."])
-        
-        t = Table(dados_pdf, colWidths=[80, 80, 240])
-        t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0), colors.black), ('TEXTCOLOR',(0,0),(-1,0), colors.whitesmoke), ('GRID',(0,0),(-1,-1),1,colors.black)]))
-        elementos.append(t)
-        doc.build(elementos)
-        st.download_button("Clique aqui para Baixar PDF", buffer.getvalue(), "Relatorio_Regional.pdf", "application/pdf")
+        if st.form_submit_button("Gravar Missão"):
+            novo_ev = pd.DataFrame([{"Data": datetime.now().strftime("%d/%m/%Y"), "Descricao": relato, "Participantes": ", ".join(participantes)}])
+            updated_ev = pd.concat([df_eventos, novo_ev], ignore_index=True)
+            conn.update(spreadsheet=URL_PLANILHA, worksheet="eventos", data=updated_ev)
+            st.success("Evento Gravado!")
