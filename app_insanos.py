@@ -4,34 +4,39 @@ from streamlit_gsheets import GSheetsConnection
 import os
 import base64
 from datetime import datetime
-import io
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Insanos MC - GV", layout="wide")
 
 # --- CONEXÃO E TRATAMENTO DE CREDENCIAIS ---
 try:
-    # 1. Transformamos os segredos em um dicionário para podermos manipular
+    # 1. Pegamos os segredos
     secrets_dict = st.secrets["connections"]["gsheets"].to_dict()
 
-    # 2. Corrigimos a chave privada caso ela tenha sido colada no formato "curto"
+    # 2. Corrigimos a chave privada (Private Key)
     if "-----BEGIN PRIVATE KEY-----" not in secrets_dict["private_key"]:
         raw_key = secrets_dict["private_key"]
-        # Reconstrói o formato PEM que o Google exige
         secrets_dict["private_key"] = f"-----BEGIN PRIVATE KEY-----\n{raw_key}\n-----END PRIVATE KEY-----\n"
 
-    # 3. Inicializamos a conexão
-    # Removemos o 'type' daqui porque ele já existe dentro do 'secrets_dict'
-    conn = st.connection("gsheets", **secrets_dict)
+    # 3. Inicializamos a conexão de forma "blindada"
+    # Passamos a classe GSheetsConnection explicitamente e os segredos via kwargs
+    conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
     
 except Exception as e:
-    st.error(f"Erro ao configurar credenciais: {e}")
-    st.stop()
+    # Caso ainda dê erro de "multiple values for type", usamos esta alternativa:
+    try:
+        # Remove o 'type' do dicionário para não duplicar com o argumento do st.connection
+        if "type" in secrets_dict:
+            del secrets_dict["type"]
+        conn = st.connection("gsheets", type=GSheetsConnection, **secrets_dict)
+    except Exception as e2:
+        st.error(f"Erro crítico de credenciais: {e2}")
+        st.stop()
 
 # URL da sua planilha
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/1QMBs6O4cB_Rqw5L8nEH-7v6MoHt2r8ORtNoGoCXrRuE"
 
-# --- FUNÇÕES DE INTERFACE (Background e Estilo) ---
+# --- FUNÇÕES DE INTERFACE ---
 def set_bg(bin_file):
     if os.path.exists(bin_file):
         with open(bin_file, 'rb') as f:
@@ -55,7 +60,7 @@ try:
     df_membros = conn.read(spreadsheet=URL_PLANILHA, worksheet="integrantes")
     df_eventos = conn.read(spreadsheet=URL_PLANILHA, worksheet="eventos")
 except Exception as e:
-    st.error(f"Erro de conexão com a planilha: {e}")
+    st.error(f"Erro ao ler planilha: {e}")
     st.stop()
 
 # --- MENU LATERAL ---
